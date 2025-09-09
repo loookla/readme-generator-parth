@@ -27,8 +27,9 @@ async function fetchRepoMetadata(owner: string, repo: string, token: string): Pr
   const base = `https://api.github.com/repos/${owner}/${repo}`;
   const headers: HeadersInit = {
     Accept: "application/vnd.github+json",
-    Authorization: `Bearer ${token}`,
+    Authorization: `token ${token}`,
     "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "readme-forge",
   };
 
   const repoData = await fetchJson<any>(base, { headers });
