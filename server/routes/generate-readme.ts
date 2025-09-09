@@ -15,7 +15,7 @@ function parseRepoUrl(url: string): { owner: string; repo: string } | null {
   return { owner: m[1], repo: m[2] };
 }
 
-async function fetchJson<T>(
+export async function fetchJson<T>(
   input: RequestInfo,
   init?: RequestInit,
 ): Promise<T> {
@@ -27,7 +27,7 @@ async function fetchJson<T>(
   return res.json() as Promise<T>;
 }
 
-async function fetchRepoMetadata(
+export async function fetchRepoMetadata(
   owner: string,
   repo: string,
   token?: string,
@@ -98,7 +98,7 @@ async function fetchRepoMetadata(
   };
 }
 
-function buildReadme(
+export function buildReadme(
   meta: RepoMetadata,
   generated: GeneratedSections,
   filled: Partial<Record<keyof GeneratedSections, boolean>>,
@@ -174,7 +174,7 @@ function buildReadme(
   return parts.join("\n");
 }
 
-async function callGemini(
+export async function callGemini(
   apiKey: string,
   meta: RepoMetadata,
 ): Promise<GeneratedSections> {
@@ -249,6 +249,63 @@ async function callGemini(
   }
 }
 
+export async function performGenerate(repoUrl: string, githubToken?: string | null, geminiKey?: string | null) {
+  const errors: { code: string; message: string }[] = [];
+  const parsed = parseRepoUrl(repoUrl);
+  if (!parsed) {
+    const err = { error: "Invalid GitHub repository URL. Expected https://github.com/<owner>/<repo>", code: "INVALID_REPO_URL" } as const;
+    throw Object.assign(new Error(err.error), err);
+  }
+
+  if (!githubToken) {
+    errors.push({ code: "MISSING_GITHUB_TOKEN", message: "Server missing GITHUB_TOKEN; using unauthenticated GitHub API (rate-limited)." });
+  }
+  if (!geminiKey) {
+    errors.push({ code: "MISSING_GEMINI_API_KEY", message: "Server missing GEMINI_API_KEY; generated content may be limited." });
+  }
+
+  let meta: RepoMetadata;
+  try {
+    meta = await fetchRepoMetadata(parsed.owner, parsed.repo, githubToken || undefined);
+  } catch (e: any) {
+    const err = { error: `GitHub API error: ${e.message}`.slice(0, 500), code: "GITHUB_API_ERROR" } as const;
+    throw Object.assign(new Error(err.error), err);
+  }
+
+  let generated: GeneratedSections = {};
+  const filled: Partial<Record<keyof GeneratedSections, boolean>> = {};
+
+  if (geminiKey) {
+    try {
+      const g = await callGemini(geminiKey, meta);
+      generated = { ...generated, ...g };
+    } catch (e: any) {
+      errors.push({ code: "GEMINI_API_ERROR", message: `Gemini API error: ${e.message}`.slice(0, 500) });
+    }
+  }
+
+  if (!generated.description && meta.description) {
+    generated.description = meta.description;
+  }
+
+  (Object.keys(generated) as (keyof GeneratedSections)[]).forEach((k) => {
+    if (generated[k]) filled[k] = true;
+  });
+
+  const readme = buildReadme(meta, generated, filled);
+  const fileName = `${meta.repo}-README.md`;
+
+  const payload: GenerateReadmeResponse = {
+    readme,
+    fileName,
+    metadata: meta,
+    filledWithGemini: filled,
+    errors: errors.length ? errors : undefined,
+  };
+
+  return payload;
+}
+
 export const generateReadmeRoute: RequestHandler = async (req, res) => {
   const errors: { code: string; message: string }[] = [];
   try {
@@ -260,89 +317,13 @@ export const generateReadmeRoute: RequestHandler = async (req, res) => {
         code: "MISSING_REPO_URL",
       });
     }
-    const parsed = parseRepoUrl(repoUrl);
-    if (!parsed) {
-      return res.status(400).json({
-        error:
-          "Invalid GitHub repository URL. Expected https://github.com/<owner>/<repo>",
-        code: "INVALID_REPO_URL",
-      });
-    }
-
-    const githubToken = process.env.GITHUB_TOKEN;
-    const geminiKey = process.env.GEMINI_API_KEY;
-
-    if (!githubToken) {
-      errors.push({
-        code: "MISSING_GITHUB_TOKEN",
-        message:
-          "Server missing GITHUB_TOKEN; using unauthenticated GitHub API (rate-limited).",
-      });
-    }
-    if (!geminiKey) {
-      errors.push({
-        code: "MISSING_GEMINI_API_KEY",
-        message:
-          "Server missing GEMINI_API_KEY; generated content may be limited.",
-      });
-    }
-
-    // Fetch repo metadata
-    let meta: RepoMetadata;
     try {
-      meta = await fetchRepoMetadata(
-        parsed.owner,
-        parsed.repo,
-        githubToken || undefined,
-      );
-    } catch (e: any) {
-      return res.status(502).json({
-        error: `GitHub API error: ${e.message}`.slice(0, 500),
-        code: "GITHUB_API_ERROR",
-      });
+      const payload = await performGenerate(repoUrl, process.env.GITHUB_TOKEN, process.env.GEMINI_API_KEY);
+      return res.json(payload);
+    } catch (err: any) {
+      const status = err?.code === "INVALID_REPO_URL" ? 400 : err?.code?.includes("GITHUB") ? 502 : 500;
+      return res.status(status).json({ error: err?.error || err?.message || "Internal error", code: err?.code || "INTERNAL_ERROR" });
     }
-
-    let generated: GeneratedSections = {};
-    const filled: Partial<Record<keyof GeneratedSections, boolean>> = {};
-
-    // Decide what needs generation
-    const needDescription =
-      !meta.description || meta.description.trim().length < 5;
-    const needMore = true; // always ask Gemini for richer sections
-
-    if (geminiKey) {
-      try {
-        const g = await callGemini(geminiKey, meta);
-        generated = { ...generated, ...g };
-      } catch (e: any) {
-        errors.push({
-          code: "GEMINI_API_ERROR",
-          message: `Gemini API error: ${e.message}`.slice(0, 500),
-        });
-      }
-    }
-
-    if (!generated.description && needDescription && meta.description) {
-      generated.description = meta.description;
-    }
-
-    // Mark what was filled
-    (Object.keys(generated) as (keyof GeneratedSections)[]).forEach((k) => {
-      if (generated[k]) filled[k] = true;
-    });
-
-    const readme = buildReadme(meta, generated, filled);
-    const fileName = `${meta.repo}-README.md`;
-
-    const payload: GenerateReadmeResponse = {
-      readme,
-      fileName,
-      metadata: meta,
-      filledWithGemini: filled,
-      errors: errors.length ? errors : undefined,
-    };
-
-    return res.json(payload);
   } catch (err: any) {
     return res
       .status(500)
