@@ -34,7 +34,7 @@ export default function Index() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const bodyText = await res.text();
+      const bodyText = await res.clone().text();
       let data: any = null;
       try {
         data = bodyText ? JSON.parse(bodyText) : null;
