@@ -255,22 +255,18 @@ export const generateReadmeRoute: RequestHandler = async (req, res) => {
     const body = req.body as GenerateReadmeRequest | undefined;
     const repoUrl = body?.repoUrl?.trim();
     if (!repoUrl) {
-      return res
-        .status(400)
-        .json({
-          error: "Repository URL is required.",
-          code: "MISSING_REPO_URL",
-        });
+      return res.status(400).json({
+        error: "Repository URL is required.",
+        code: "MISSING_REPO_URL",
+      });
     }
     const parsed = parseRepoUrl(repoUrl);
     if (!parsed) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Invalid GitHub repository URL. Expected https://github.com/<owner>/<repo>",
-          code: "INVALID_REPO_URL",
-        });
+      return res.status(400).json({
+        error:
+          "Invalid GitHub repository URL. Expected https://github.com/<owner>/<repo>",
+        code: "INVALID_REPO_URL",
+      });
     }
 
     const githubToken = process.env.GITHUB_TOKEN;
@@ -300,12 +296,10 @@ export const generateReadmeRoute: RequestHandler = async (req, res) => {
         githubToken || undefined,
       );
     } catch (e: any) {
-      return res
-        .status(502)
-        .json({
-          error: `GitHub API error: ${e.message}`.slice(0, 500),
-          code: "GITHUB_API_ERROR",
-        });
+      return res.status(502).json({
+        error: `GitHub API error: ${e.message}`.slice(0, 500),
+        code: "GITHUB_API_ERROR",
+      });
     }
 
     let generated: GeneratedSections = {};
