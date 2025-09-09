@@ -32,24 +32,45 @@ async function fetchRepoMetadata(owner: string, repo: string, token: string): Pr
     "User-Agent": "readme-forge",
   };
 
+  // Base repo must succeed or we bail with a clear error
   const repoData = await fetchJson<any>(base, { headers });
-  const langsData = await fetchJson<Record<string, number>>(`${base}/languages`, { headers });
 
-  // Using git trees for project structure
-  const defaultBranch = repoData.default_branch as string;
-  const treeData = await fetchJson<{ tree: { path: string; type: string }[] }>(
-    `${base}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`,
-    { headers },
-  );
+  // Tolerate failures for secondary data
+  let langsData: Record<string, number> | null = null;
+  try {
+    langsData = await fetchJson<Record<string, number>>(`${base}/languages`, { headers });
+  } catch {
+    langsData = null;
+  }
+
+  const defaultBranch = (repoData.default_branch as string) || "main";
+
+  // Try recursive tree; if it fails (huge repos), fall back to shallow contents
+  let tree: string[] = [];
+  try {
+    const treeData = await fetchJson<{ tree: { path: string; type: string }[] }>(
+      `${base}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`,
+      { headers },
+    );
+    tree = (treeData.tree || [])
+      .filter((n) => n.type === "blob" || n.type === "tree")
+      .map((n) => n.path)
+      .slice(0, 500);
+  } catch {
+    // Fallback: top-level and first-level via contents API
+    try {
+      const top = await fetchJson<any[]>(`${base}/contents`, { headers });
+      const level1 = top
+        .map((n) => n.path as string)
+        .slice(0, 100);
+      tree = level1;
+    } catch {
+      tree = [];
+    }
+  }
 
   const languages = Object.keys(langsData ?? {});
-
   const license: string | null = repoData.license?.spdx_id ?? repoData.license?.name ?? null;
-
-  const tree = (treeData.tree || [])
-    .filter((n) => n.type === "blob" || n.type === "tree")
-    .map((n) => n.path)
-    .slice(0, 500); // cap for prompt size
 
   return {
     owner,
