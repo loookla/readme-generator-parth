@@ -23,14 +23,16 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
   return res.json() as Promise<T>;
 }
 
-async function fetchRepoMetadata(owner: string, repo: string, token: string): Promise<RepoMetadata> {
+async function fetchRepoMetadata(owner: string, repo: string, token?: string): Promise<RepoMetadata> {
   const base = `https://api.github.com/repos/${owner}/${repo}`;
   const headers: HeadersInit = {
     Accept: "application/vnd.github+json",
-    Authorization: `token ${token}`,
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": "readme-forge",
   };
+  if (token) {
+    (headers as any).Authorization = `token ${token}`;
+  }
 
   // Base repo must succeed or we bail with a clear error
   const repoData = await fetchJson<any>(base, { headers });
@@ -232,7 +234,7 @@ export const generateReadmeRoute: RequestHandler = async (req, res) => {
     const geminiKey = process.env.GEMINI_API_KEY;
 
     if (!githubToken) {
-      return res.status(500).json({ error: "Server missing GITHUB_TOKEN environment variable.", code: "MISSING_GITHUB_TOKEN" });
+      errors.push({ code: "MISSING_GITHUB_TOKEN", message: "Server missing GITHUB_TOKEN; using unauthenticated GitHub API (rate-limited)." });
     }
     if (!geminiKey) {
       errors.push({ code: "MISSING_GEMINI_API_KEY", message: "Server missing GEMINI_API_KEY; generated content may be limited." });
@@ -241,7 +243,7 @@ export const generateReadmeRoute: RequestHandler = async (req, res) => {
     // Fetch repo metadata
     let meta: RepoMetadata;
     try {
-      meta = await fetchRepoMetadata(parsed.owner, parsed.repo, githubToken);
+      meta = await fetchRepoMetadata(parsed.owner, parsed.repo, githubToken || undefined);
     } catch (e: any) {
       return res.status(502).json({ error: `GitHub API error: ${e.message}`.slice(0, 500), code: "GITHUB_API_ERROR" });
     }
