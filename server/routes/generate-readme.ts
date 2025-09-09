@@ -4,7 +4,7 @@ import type {
   GenerateReadmeResponse,
   RepoMetadata,
   GeneratedSections,
-} from "@shared/api";
+} from "../../shared/api";
 
 const GITHUB_REPO_REGEX =
   /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:\/?|#.?)?$/i;
