@@ -6,7 +6,8 @@ import type {
   GeneratedSections,
 } from "@shared/api";
 
-const GITHUB_REPO_REGEX = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:\/?|#.?)?$/i;
+const GITHUB_REPO_REGEX =
+  /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:\/?|#.?)?$/i;
 
 function parseRepoUrl(url: string): { owner: string; repo: string } | null {
   const m = url.match(GITHUB_REPO_REGEX);
@@ -14,7 +15,10 @@ function parseRepoUrl(url: string): { owner: string; repo: string } | null {
   return { owner: m[1], repo: m[2] };
 }
 
-async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+async function fetchJson<T>(
+  input: RequestInfo,
+  init?: RequestInit,
+): Promise<T> {
   const res = await fetch(input, init);
   if (!res.ok) {
     const text = await res.text();
@@ -23,7 +27,11 @@ async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> 
   return res.json() as Promise<T>;
 }
 
-async function fetchRepoMetadata(owner: string, repo: string, token?: string): Promise<RepoMetadata> {
+async function fetchRepoMetadata(
+  owner: string,
+  repo: string,
+  token?: string,
+): Promise<RepoMetadata> {
   const base = `https://api.github.com/repos/${owner}/${repo}`;
   const headers: HeadersInit = {
     Accept: "application/vnd.github+json",
@@ -40,7 +48,9 @@ async function fetchRepoMetadata(owner: string, repo: string, token?: string): P
   // Tolerate failures for secondary data
   let langsData: Record<string, number> | null = null;
   try {
-    langsData = await fetchJson<Record<string, number>>(`${base}/languages`, { headers });
+    langsData = await fetchJson<Record<string, number>>(`${base}/languages`, {
+      headers,
+    });
   } catch {
     langsData = null;
   }
@@ -50,10 +60,11 @@ async function fetchRepoMetadata(owner: string, repo: string, token?: string): P
   // Try recursive tree; if it fails (huge repos), fall back to shallow contents
   let tree: string[] = [];
   try {
-    const treeData = await fetchJson<{ tree: { path: string; type: string }[] }>(
-      `${base}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`,
-      { headers },
-    );
+    const treeData = await fetchJson<{
+      tree: { path: string; type: string }[];
+    }>(`${base}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`, {
+      headers,
+    });
     tree = (treeData.tree || [])
       .filter((n) => n.type === "blob" || n.type === "tree")
       .map((n) => n.path)
@@ -62,9 +73,7 @@ async function fetchRepoMetadata(owner: string, repo: string, token?: string): P
     // Fallback: top-level and first-level via contents API
     try {
       const top = await fetchJson<any[]>(`${base}/contents`, { headers });
-      const level1 = top
-        .map((n) => n.path as string)
-        .slice(0, 100);
+      const level1 = top.map((n) => n.path as string).slice(0, 100);
       tree = level1;
     } catch {
       tree = [];
@@ -72,7 +81,8 @@ async function fetchRepoMetadata(owner: string, repo: string, token?: string): P
   }
 
   const languages = Object.keys(langsData ?? {});
-  const license: string | null = repoData.license?.spdx_id ?? repoData.license?.name ?? null;
+  const license: string | null =
+    repoData.license?.spdx_id ?? repoData.license?.name ?? null;
 
   return {
     owner,
@@ -94,7 +104,11 @@ function buildReadme(
   filled: Partial<Record<keyof GeneratedSections, boolean>>,
 ): string {
   const title = meta.name || `${meta.owner}/${meta.repo}`;
-  const description = (generated.description ?? meta.description ?? "Not specified.").trim();
+  const description = (
+    generated.description ??
+    meta.description ??
+    "Not specified."
+  ).trim();
 
   const featuresArr = (generated.features ?? [])
     .map((s) => s.trim())
@@ -104,7 +118,9 @@ function buildReadme(
   const installation = (generated.installation ?? "Not specified.").trim();
   const usage = (generated.usage ?? "Not specified.").trim();
 
-  const techStack = meta.languages.length ? meta.languages.join(", ") : "Not specified.";
+  const techStack = meta.languages.length
+    ? meta.languages.join(", ")
+    : "Not specified.";
 
   const structureLines = meta.tree.length ? meta.tree : ["Not specified."];
 
@@ -120,13 +136,28 @@ function buildReadme(
   for (const f of features) parts.push(`- ${f}`);
   parts.push("");
   parts.push(`## Installation Guide`);
-  parts.push(installation.includes("```") ? installation : "```bash\n" + installation + "\n```");
+  parts.push(
+    installation.includes("```")
+      ? installation
+      : "```bash\n" + installation + "\n```",
+  );
   parts.push("");
   parts.push(`## Usage`);
-  parts.push(usage.includes("```") ? usage : usage !== "Not specified." ? "```\n" + usage + "\n```" : usage);
+  parts.push(
+    usage.includes("```")
+      ? usage
+      : usage !== "Not specified."
+        ? "```\n" + usage + "\n```"
+        : usage,
+  );
   parts.push("");
   parts.push(`## Tech Stack`);
-  parts.push(techStack.split(/,\s*/).map((t) => `- ${t}`).join("\n"));
+  parts.push(
+    techStack
+      .split(/,\s*/)
+      .map((t) => `- ${t}`)
+      .join("\n"),
+  );
   parts.push("");
   parts.push(`## Project Structure`);
   if (structureLines.length && structureLines[0] !== "Not specified.") {
@@ -143,7 +174,10 @@ function buildReadme(
   return parts.join("\n");
 }
 
-async function callGemini(apiKey: string, meta: RepoMetadata): Promise<GeneratedSections> {
+async function callGemini(
+  apiKey: string,
+  meta: RepoMetadata,
+): Promise<GeneratedSections> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const prompt = [
@@ -221,38 +255,65 @@ export const generateReadmeRoute: RequestHandler = async (req, res) => {
     const body = req.body as GenerateReadmeRequest | undefined;
     const repoUrl = body?.repoUrl?.trim();
     if (!repoUrl) {
-      return res.status(400).json({ error: "Repository URL is required.", code: "MISSING_REPO_URL" });
+      return res
+        .status(400)
+        .json({
+          error: "Repository URL is required.",
+          code: "MISSING_REPO_URL",
+        });
     }
     const parsed = parseRepoUrl(repoUrl);
     if (!parsed) {
       return res
         .status(400)
-        .json({ error: "Invalid GitHub repository URL. Expected https://github.com/<owner>/<repo>", code: "INVALID_REPO_URL" });
+        .json({
+          error:
+            "Invalid GitHub repository URL. Expected https://github.com/<owner>/<repo>",
+          code: "INVALID_REPO_URL",
+        });
     }
 
     const githubToken = process.env.GITHUB_TOKEN;
     const geminiKey = process.env.GEMINI_API_KEY;
 
     if (!githubToken) {
-      errors.push({ code: "MISSING_GITHUB_TOKEN", message: "Server missing GITHUB_TOKEN; using unauthenticated GitHub API (rate-limited)." });
+      errors.push({
+        code: "MISSING_GITHUB_TOKEN",
+        message:
+          "Server missing GITHUB_TOKEN; using unauthenticated GitHub API (rate-limited).",
+      });
     }
     if (!geminiKey) {
-      errors.push({ code: "MISSING_GEMINI_API_KEY", message: "Server missing GEMINI_API_KEY; generated content may be limited." });
+      errors.push({
+        code: "MISSING_GEMINI_API_KEY",
+        message:
+          "Server missing GEMINI_API_KEY; generated content may be limited.",
+      });
     }
 
     // Fetch repo metadata
     let meta: RepoMetadata;
     try {
-      meta = await fetchRepoMetadata(parsed.owner, parsed.repo, githubToken || undefined);
+      meta = await fetchRepoMetadata(
+        parsed.owner,
+        parsed.repo,
+        githubToken || undefined,
+      );
     } catch (e: any) {
-      return res.status(502).json({ error: `GitHub API error: ${e.message}`.slice(0, 500), code: "GITHUB_API_ERROR" });
+      return res
+        .status(502)
+        .json({
+          error: `GitHub API error: ${e.message}`.slice(0, 500),
+          code: "GITHUB_API_ERROR",
+        });
     }
 
     let generated: GeneratedSections = {};
     const filled: Partial<Record<keyof GeneratedSections, boolean>> = {};
 
     // Decide what needs generation
-    const needDescription = !meta.description || meta.description.trim().length < 5;
+    const needDescription =
+      !meta.description || meta.description.trim().length < 5;
     const needMore = true; // always ask Gemini for richer sections
 
     if (geminiKey) {
@@ -260,7 +321,10 @@ export const generateReadmeRoute: RequestHandler = async (req, res) => {
         const g = await callGemini(geminiKey, meta);
         generated = { ...generated, ...g };
       } catch (e: any) {
-        errors.push({ code: "GEMINI_API_ERROR", message: `Gemini API error: ${e.message}`.slice(0, 500) });
+        errors.push({
+          code: "GEMINI_API_ERROR",
+          message: `Gemini API error: ${e.message}`.slice(0, 500),
+        });
       }
     }
 
@@ -286,6 +350,8 @@ export const generateReadmeRoute: RequestHandler = async (req, res) => {
 
     return res.json(payload);
   } catch (err: any) {
-    return res.status(500).json({ error: "Unexpected server error.", code: "INTERNAL_ERROR" });
+    return res
+      .status(500)
+      .json({ error: "Unexpected server error.", code: "INTERNAL_ERROR" });
   }
 };
