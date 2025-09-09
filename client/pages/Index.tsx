@@ -34,7 +34,7 @@ export default function Index() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const bodyText = await res.clone().text();
+      const bodyText = res.bodyUsed ? "" : await res.text();
       let data: any = null;
       try {
         data = bodyText ? JSON.parse(bodyText) : null;
@@ -47,9 +47,9 @@ export default function Index() {
         return;
       }
       const ok = data as GenerateReadmeResponse;
-      setReadme(ok.readme);
-      setFileName(ok.fileName || "README.md");
-      setApiErrors(ok.errors || []);
+      setReadme(ok?.readme ?? "");
+      setFileName(ok?.fileName || "README.md");
+      setApiErrors(ok?.errors || []);
     } catch (e: any) {
       setError(e?.message || "Network error");
     } finally {
