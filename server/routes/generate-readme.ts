@@ -249,26 +249,49 @@ export async function callGemini(
   }
 }
 
-export async function performGenerate(repoUrl: string, githubToken?: string | null, geminiKey?: string | null) {
+export async function performGenerate(
+  repoUrl: string,
+  githubToken?: string | null,
+  geminiKey?: string | null,
+) {
   const errors: { code: string; message: string }[] = [];
   const parsed = parseRepoUrl(repoUrl);
   if (!parsed) {
-    const err = { error: "Invalid GitHub repository URL. Expected https://github.com/<owner>/<repo>", code: "INVALID_REPO_URL" } as const;
+    const err = {
+      error:
+        "Invalid GitHub repository URL. Expected https://github.com/<owner>/<repo>",
+      code: "INVALID_REPO_URL",
+    } as const;
     throw Object.assign(new Error(err.error), err);
   }
 
   if (!githubToken) {
-    errors.push({ code: "MISSING_GITHUB_TOKEN", message: "Server missing GITHUB_TOKEN; using unauthenticated GitHub API (rate-limited)." });
+    errors.push({
+      code: "MISSING_GITHUB_TOKEN",
+      message:
+        "Server missing GITHUB_TOKEN; using unauthenticated GitHub API (rate-limited).",
+    });
   }
   if (!geminiKey) {
-    errors.push({ code: "MISSING_GEMINI_API_KEY", message: "Server missing GEMINI_API_KEY; generated content may be limited." });
+    errors.push({
+      code: "MISSING_GEMINI_API_KEY",
+      message:
+        "Server missing GEMINI_API_KEY; generated content may be limited.",
+    });
   }
 
   let meta: RepoMetadata;
   try {
-    meta = await fetchRepoMetadata(parsed.owner, parsed.repo, githubToken || undefined);
+    meta = await fetchRepoMetadata(
+      parsed.owner,
+      parsed.repo,
+      githubToken || undefined,
+    );
   } catch (e: any) {
-    const err = { error: `GitHub API error: ${e.message}`.slice(0, 500), code: "GITHUB_API_ERROR" } as const;
+    const err = {
+      error: `GitHub API error: ${e.message}`.slice(0, 500),
+      code: "GITHUB_API_ERROR",
+    } as const;
     throw Object.assign(new Error(err.error), err);
   }
 
@@ -280,7 +303,10 @@ export async function performGenerate(repoUrl: string, githubToken?: string | nu
       const g = await callGemini(geminiKey, meta);
       generated = { ...generated, ...g };
     } catch (e: any) {
-      errors.push({ code: "GEMINI_API_ERROR", message: `Gemini API error: ${e.message}`.slice(0, 500) });
+      errors.push({
+        code: "GEMINI_API_ERROR",
+        message: `Gemini API error: ${e.message}`.slice(0, 500),
+      });
     }
   }
 
@@ -318,11 +344,25 @@ export const generateReadmeRoute: RequestHandler = async (req, res) => {
       });
     }
     try {
-      const payload = await performGenerate(repoUrl, process.env.GITHUB_TOKEN, process.env.GEMINI_API_KEY);
+      const payload = await performGenerate(
+        repoUrl,
+        process.env.GITHUB_TOKEN,
+        process.env.GEMINI_API_KEY,
+      );
       return res.json(payload);
     } catch (err: any) {
-      const status = err?.code === "INVALID_REPO_URL" ? 400 : err?.code?.includes("GITHUB") ? 502 : 500;
-      return res.status(status).json({ error: err?.error || err?.message || "Internal error", code: err?.code || "INTERNAL_ERROR" });
+      const status =
+        err?.code === "INVALID_REPO_URL"
+          ? 400
+          : err?.code?.includes("GITHUB")
+            ? 502
+            : 500;
+      return res
+        .status(status)
+        .json({
+          error: err?.error || err?.message || "Internal error",
+          code: err?.code || "INTERNAL_ERROR",
+        });
     }
   } catch (err: any) {
     return res
