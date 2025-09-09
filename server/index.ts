@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
 import { generateReadmeRoute } from "./routes/generate-readme";
+import { handleEnvCheck } from "./routes/env-check";
 
 export function createServer() {
   const app = express();
@@ -19,6 +20,7 @@ export function createServer() {
   });
 
   app.get("/api/demo", handleDemo);
+  app.get("/api/env-check", handleEnvCheck);
   app.post("/api/generate-readme", generateReadmeRoute);
 
   return app;
