@@ -34,9 +34,15 @@ export default function Index() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json()) as any;
+      const bodyText = await res.text();
+      let data: any = null;
+      try {
+        data = bodyText ? JSON.parse(bodyText) : null;
+      } catch {
+        data = null;
+      }
       if (!res.ok) {
-        setError((data?.error as string) || "Unexpected error");
+        setError((data?.error as string) || `Request failed (${res.status})`);
         setLoading(false);
         return;
       }
