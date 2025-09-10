@@ -288,11 +288,22 @@ export async function performGenerate(
       githubToken || undefined,
     );
   } catch (e: any) {
-    const err = {
-      error: `GitHub API error: ${e.message}`.slice(0, 500),
-      code: "GITHUB_API_ERROR",
-    } as const;
-    throw Object.assign(new Error(err.error), err);
+    const msg = String(e?.message || "");
+    if (githubToken && (msg.includes("401") || /Bad credentials/i.test(msg))) {
+      errors.push({
+        code: "GITHUB_TOKEN_BAD_CREDENTIALS",
+        message:
+          "Provided GITHUB_TOKEN is invalid; using unauthenticated GitHub API (rate-limited).",
+      });
+      // Retry unauthenticated for public repos
+      meta = await fetchRepoMetadata(parsed.owner, parsed.repo, undefined);
+    } else {
+      const err = {
+        error: `GitHub API error: ${e.message}`.slice(0, 500),
+        code: "GITHUB_API_ERROR",
+      } as const;
+      throw Object.assign(new Error(err.error), err);
+    }
   }
 
   let generated: GeneratedSections = {};
